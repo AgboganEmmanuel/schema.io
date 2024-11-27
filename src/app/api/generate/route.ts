@@ -20,7 +20,10 @@ export async function POST(request: Request) {
       }],
     });
 
-    const response = message.content[0].text;
+    const response = message.content.find(block => 
+      block.type === 'text' && 'text' in block 
+    )?.text || '';
+
     let parsedResponse;
     
     try {
