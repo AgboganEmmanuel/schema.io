@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+'use client';
+
+import React, { useEffect, useRef } from 'react';
 import ReactFlow, { 
   Node, 
   Edge,
@@ -90,9 +92,11 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = React.useState<Node | null>(null);
   const [isDark, setIsDark] = React.useState(false);
+  const [initialSetup, setInitialSetup] = React.useState(true);
+  const [isUpdatingFromSQL, setIsUpdatingFromSQL] = React.useState(false);
+  const prevSqlRef = React.useRef(schema?.sql);
 
   useEffect(() => {
-    // Sync with global theme
     const updateTheme = () => {
       setIsDark(document.documentElement.classList.contains('dark'));
     };
@@ -114,9 +118,145 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
     return () => observer.disconnect();
   }, []);
 
-  const updateSQL = React.useCallback((nodes: Node[], edges: Edge[]) => {
-    if (!onSchemaChange) return;
+  const generateEdgeId = React.useCallback((source: string, sourceField: string, target: string, targetField: string) => {
+    const [firstTable, firstField, secondTable, secondField] = [source, sourceField, target, targetField]
+      .join('-')
+      .split('-')
+      .sort();
+    return `${firstTable}-${firstField}-${secondTable}-${secondField}`;
+  }, []);
 
+  const parseSchema = React.useCallback(() => {
+    if (!schema?.sql) return;
+    if (prevSqlRef.current === schema.sql && !initialSetup) return;
+    
+    setIsUpdatingFromSQL(true);
+    prevSqlRef.current = schema.sql;
+    
+    const tableMatches = schema.sql.match(/CREATE TABLE ["`]?(\w+)["`]?\s*\(([\s\S]+?)\);/g) || [];
+    const parsedNodes: Node[] = [];
+    const parsedEdges: Edge[] = [];
+    const tables = new Map<string, TableInfo>();
+
+    tableMatches.forEach((tableMatch, index) => {
+      const tableNameMatch = tableMatch.match(/CREATE TABLE ["`]?(\w+)["`]?/);
+      if (!tableNameMatch) return;
+      
+      const tableName = tableNameMatch[1];
+      const fieldsMatch = tableMatch.match(/\(([\s\S]+)\)/);
+      if (!fieldsMatch) return;
+      
+      const fields = fieldsMatch[1]
+        .split(',')
+        .map(field => field.trim())
+        .filter(field => field);
+      
+      tables.set(tableName, { fields, foreignKeys: [] });
+      
+      // Check for inline REFERENCES in field definitions
+      fields.forEach(field => {
+        const inlineRefMatch = field.match(/(\w+).*\s+REFERENCES\s+["`]?(\w+)["`]?\s*\(\s*["`]?(\w+)["`]?\s*\)/i);
+        if (inlineRefMatch) {
+          const [_, sourceField, targetTable, targetField] = inlineRefMatch;
+          tables.get(tableName)?.foreignKeys.push({
+            sourceField: sourceField.trim(),
+            targetTable: targetTable.trim(),
+            targetField: targetField.trim(),
+          });
+        }
+      });
+      
+      // Also check for explicit FOREIGN KEY syntax
+      const foreignKeyRegex = /FOREIGN KEY\s*\(\s*["`]?(\w+)["`]?\s*\)\s*REFERENCES\s*["`]?(\w+)["`]?\s*\(\s*["`]?(\w+)["`]?\s*\)/gi;
+      let fkMatch;
+      while ((fkMatch = foreignKeyRegex.exec(fieldsMatch[1])) !== null) {
+        const [_, sourceField, targetTable, targetField] = fkMatch;
+        tables.get(tableName)?.foreignKeys.push({
+          sourceField: sourceField.trim(),
+          targetTable: targetTable.trim(),
+          targetField: targetField.trim(),
+        });
+      }
+
+      const colorKeys = Object.keys(nodeColors);
+      const colorKey = colorKeys[index % colorKeys.length];
+      const color = isDark ? nodeColors[colorKey as keyof typeof nodeColors].dark : nodeColors[colorKey as keyof typeof nodeColors].light;
+      
+      const existingNode = nodes.find(n => n.id === tableName);
+      const position = existingNode ? existingNode.position : {
+        x: 300 * (index % 3),
+        y: 250 * Math.floor(index / 3)
+      };
+
+      parsedNodes.push({
+        id: tableName,
+        type: 'default',
+        position,
+        data: { 
+          label: <TableNode tableName={tableName} fields={fields} color={color} isDark={isDark} />,
+          fields,
+        },
+        style: {
+          ...nodeDefaults.style,
+          border: `2px solid ${color}`,
+          background: `${color}10`,
+        },
+      });
+    });
+
+    tables.forEach((tableInfo, tableName) => {
+      tableInfo.foreignKeys.forEach((fk) => {
+        const sourceNode = parsedNodes.find(node => node.id === tableName);
+        const targetNode = parsedNodes.find(node => node.id === fk.targetTable);
+        
+        if (sourceNode && targetNode) {
+          const color = isDark ? nodeColors.primary.dark : nodeColors.primary.light;
+          const edgeId = generateEdgeId(tableName, fk.sourceField, fk.targetTable, fk.targetField);
+          
+          if (!parsedEdges.some(edge => edge.id === edgeId)) {
+            parsedEdges.push({
+              id: edgeId,
+              source: tableName,
+              target: fk.targetTable,
+              sourceHandle: fk.sourceField,
+              targetHandle: fk.targetField,
+              type: 'smoothstep',
+              animated: true,
+              label: `${fk.sourceField} → ${fk.targetField}`,
+              labelStyle: { 
+                fill: color,
+                fontSize: '12px',
+                fontFamily: 'monospace',
+              },
+              style: { 
+                stroke: color,
+                strokeWidth: 2,
+              },
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                color: color,
+                width: 20,
+                height: 20,
+              },
+            });
+          }
+        }
+      });
+    });
+
+    setNodes(parsedNodes);
+    setEdges(parsedEdges);
+    setInitialSetup(false);
+  }, [schema?.sql, isDark, nodes, initialSetup, generateEdgeId]);
+
+  useEffect(() => {
+    parseSchema();
+    setIsUpdatingFromSQL(false);
+  }, [schema.sql, parseSchema]);
+
+  const updateSQL = React.useCallback((nodes: Node[], edges: Edge[]) => {
+    if (!onSchemaChange || isUpdatingFromSQL) return;
+    
     const tables = new Map<string, { fields: string[] }>();
     nodes.forEach(node => {
       tables.set(node.id, { fields: node.data.fields });
@@ -141,100 +281,7 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
     });
 
     onSchemaChange(sqlStatements.join('\n\n'));
-  }, [onSchemaChange]);
-
-  React.useEffect(() => {
-    if (!schema?.sql) return;
-    
-    const tableMatches = schema.sql.match(/CREATE TABLE ["`]?(\w+)["`]?\s*\(([\s\S]+?)\);/g) || [];
-    const parsedNodes: Node[] = [];
-    const parsedEdges: Edge[] = [];
-    const tables = new Map<string, TableInfo>();
-
-    // Premier passage : créer les nœuds pour toutes les tables
-    tableMatches.forEach((tableMatch, index) => {
-      const tableNameMatch = tableMatch.match(/CREATE TABLE ["`]?(\w+)["`]?/);
-      if (!tableNameMatch) return;
-      
-      const tableName = tableNameMatch[1];
-      const fieldsMatch = tableMatch.match(/\(([\s\S]+)\)/);
-      if (!fieldsMatch) return;
-      
-      const fields = fieldsMatch[1]
-        .split(',')
-        .map(field => field.trim())
-        .filter(field => field && !field.toLowerCase().includes('foreign key'));
-      
-      tables.set(tableName, { fields, foreignKeys: [] });
-      
-      const foreignKeyRegex = /FOREIGN KEY\s*\(\s*["`]?(\w+)["`]?\s*\)\s*REFERENCES\s*["`]?(\w+)["`]?\s*\(\s*["`]?(\w+)["`]?\s*\)/gi;
-      let fkMatch;
-      while ((fkMatch = foreignKeyRegex.exec(fieldsMatch[1])) !== null) {
-        const [_, sourceField, targetTable, targetField] = fkMatch;
-        tables.get(tableName)?.foreignKeys.push({
-          sourceField: sourceField.trim(),
-          targetTable: targetTable.trim(),
-          targetField: targetField.trim(),
-        });
-      }
-
-      const colorKeys = Object.keys(nodeColors);
-      const colorKey = colorKeys[index % colorKeys.length];
-      const color = isDark ? nodeColors[colorKey as keyof typeof nodeColors].dark : nodeColors[colorKey as keyof typeof nodeColors].light;
-      
-      parsedNodes.push({
-        id: tableName,
-        type: 'default',
-        position: { 
-          x: 300 * (index % 3), 
-          y: 250 * Math.floor(index / 3) 
-        },
-        data: { 
-          label: <TableNode tableName={tableName} fields={fields} color={color} isDark={isDark} />,
-          fields,
-        },
-        style: {
-          ...nodeDefaults.style,
-          border: `2px solid ${color}`,
-          background: `${color}10`,
-        },
-      });
-    });
-
-    // Deuxième passage : créer les arêtes pour les clés étrangères
-    tables.forEach((tableInfo, tableName) => {
-      tableInfo.foreignKeys.forEach((fk) => {
-        const sourceNode = parsedNodes.find(node => node.id === tableName);
-        const targetNode = parsedNodes.find(node => node.id === fk.targetTable);
-        
-        if (sourceNode && targetNode) {
-          const color = isDark ? nodeColors.primary.dark : nodeColors.primary.light;
-          parsedEdges.push({
-            id: `${tableName}-${fk.targetTable}-${fk.sourceField}`,
-            source: tableName,
-            target: fk.targetTable,
-            sourceHandle: fk.sourceField,
-            targetHandle: fk.targetField,
-            type: 'smoothstep',
-            animated: true,
-            label: `${fk.sourceField} → ${fk.targetField}`,
-            labelStyle: { fill: color },
-            style: { 
-              stroke: color,
-              strokeWidth: 2,
-            },
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              color: color,
-            },
-          });
-        }
-      });
-    });
-
-    setNodes(parsedNodes);
-    setEdges(parsedEdges);
-  }, [schema?.sql, isDark]);
+  }, [onSchemaChange, isUpdatingFromSQL]);
 
   const handleNodesChange = React.useCallback(
     (changes: NodeChange[]) => {
@@ -249,7 +296,9 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
         }
         return node;
       });
-      updateSQL(updatedNodes, edges);
+      if (changes.some(change => change.type === 'position')) {
+        updateSQL(updatedNodes, edges);
+      }
     },
     [nodes, edges, onNodesChange, updateSQL]
   );
@@ -257,51 +306,42 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
   const handleEdgesChange = React.useCallback(
     (changes: EdgeChange[]) => {
       onEdgesChange(changes);
-      updateSQL(nodes, edges);
     },
-    [nodes, edges, onEdgesChange, updateSQL]
-  );
-
-  const handleConnect = React.useCallback(
-    (params: Connection) => {
-      const newEdge: Edge = {
-        id: `e${params.source}-${params.target}`,
-        source: params.source!,
-        target: params.target!,
-        type: 'smoothstep',
-        animated: true,
-        style: { stroke: isDark ? nodeColors.primary.dark : nodeColors.primary.light, strokeWidth: 2 },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: isDark ? nodeColors.primary.dark : nodeColors.primary.light,
-        },
-      };
-      
-      setEdges(eds => [...eds, newEdge]);
-      updateSQL(nodes, [...edges, newEdge]);
-    },
-    [nodes, edges, setEdges, updateSQL, isDark]
+    [onEdgesChange]
   );
 
   const onConnect = React.useCallback(
     (params: Connection) => {
+      if (!params.source || !params.target || !params.sourceHandle || !params.targetHandle) return;
+      
+      const edgeId = generateEdgeId(params.source, params.sourceHandle, params.target, params.targetHandle);
       const newEdge: Edge = {
-        id: `e${params.source}-${params.target}`,
-        source: params.source!,
-        target: params.target!,
+        id: edgeId,
+        source: params.source,
+        target: params.target,
+        sourceHandle: params.sourceHandle,
+        targetHandle: params.targetHandle,
         type: 'smoothstep',
         animated: true,
-        style: { stroke: isDark ? nodeColors.primary.dark : nodeColors.primary.light, strokeWidth: 2 },
+        label: `${params.sourceHandle} → ${params.targetHandle}`,
+        style: { 
+          stroke: isDark ? nodeColors.primary.dark : nodeColors.primary.light, 
+          strokeWidth: 2,
+        },
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: isDark ? nodeColors.primary.dark : nodeColors.primary.light,
+          width: 20,
+          height: 20,
         },
       };
       
-      setEdges(eds => [...eds, newEdge]);
-      updateSQL(nodes, [...edges, newEdge]);
+      if (!edges.some(edge => edge.id === edgeId)) {
+        setEdges(eds => [...eds, newEdge]);
+        updateSQL(nodes, [...edges, newEdge]);
+      }
     },
-    [nodes, edges, setEdges, updateSQL, isDark]
+    [nodes, edges, setEdges, updateSQL, isDark, generateEdgeId]
   );
 
   return (
@@ -309,9 +349,22 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
+        onNodeClick={(_, node) => setSelectedNode(node)}
+        defaultEdgeOptions={{
+          type: 'smoothstep',
+          animated: true,
+          style: { 
+            strokeWidth: 2,
+          },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 20,
+            height: 20,
+          },
+        }}
         fitView
         className="h-full w-full"
       >
@@ -331,7 +384,7 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
                   onChange={(e) => {
                     const newNodes = nodes.map(n => {
                       if (n.id === selectedNode.id) {
-                        return {
+                        const updatedNode = {
                           ...n,
                           data: {
                             ...n.data,
@@ -340,6 +393,7 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
                             ),
                           },
                         };
+                        return updatedNode;
                       }
                       return n;
                     });

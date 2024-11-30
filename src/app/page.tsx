@@ -1,60 +1,42 @@
 'use client';
 
 import { useState } from 'react';
-import dynamic from 'next/dynamic';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-
-const SchemaViewer = dynamic(() => import('@/components/SchemaViewer'), { ssr: false });
-const CodeEditor = dynamic(() => import('@/components/CodeEditor'), { ssr: false });
-
-const defaultSchema = {
-  sql: `CREATE TABLE User (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  email VARCHAR(255) UNIQUE,
-  name VARCHAR(255),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE Post (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  title VARCHAR(255),
-  content TEXT,
-  published BOOLEAN DEFAULT false,
-  author_id INT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (author_id) REFERENCES User(id)
-);`
-};
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
-  const [schema, setSchema] = useState<{ sql: string }>(defaultSchema);
+  const [prompt, setPrompt] = useState('');
+  const router = useRouter();
 
-  const resetSchema = () => {
-    setSchema(defaultSchema);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    router.push(`/schema?prompt=${encodeURIComponent(prompt)}`);
   };
 
   return (
-    <main className="h-screen flex flex-col">
-      <ResizablePanelGroup
-        direction="horizontal"
-        className="flex-1"
-      >
-        <ResizablePanel defaultSize={50}>
-          <div className="h-full w-full">
-            <CodeEditor
-              value={schema.sql}
-              language="sql"
-              onChange={sql => setSchema({ sql })}
+    <main className="h-screen flex items-center justify-center bg-background">
+      <div className="w-full max-w-md p-6">
+        <h1 className="text-4xl font-bold mb-8 text-center">Schema Generator</h1>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="prompt" className="block text-sm font-medium mb-2">
+              Décrivez votre schéma
+            </label>
+            <textarea
+              id="prompt"
+              className="w-full p-3 border rounded-md min-h-[100px] bg-background"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Exemple: Créer un schéma de base de données pour une application de blog avec des utilisateurs et des articles"
             />
           </div>
-        </ResizablePanel>
-        <ResizableHandle />
-        <ResizablePanel defaultSize={50}>
-          <div className="h-full w-full">
-            <SchemaViewer schema={schema} onSchemaChange={sql => setSchema({ sql })} />
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+          <button
+            type="submit"
+            className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          >
+            Générer le schéma
+          </button>
+        </form>
+      </div>
     </main>
   );
 }
