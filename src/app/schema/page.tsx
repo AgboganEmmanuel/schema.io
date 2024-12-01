@@ -59,30 +59,30 @@ export default function SchemaPage() {
   }
 
   return (
-    <main className="h-screen flex flex-col">
-      <ResizablePanelGroup
-        direction="horizontal"
-        className="flex-1"
-      >
-        <ResizablePanel defaultSize={50}>
-          <div className="h-full w-full">
-            <CodeEditor
-              value={schema.sql}
-              language="sql"
-              onChange={sql => setSchema({ sql })}
-            />
-          </div>
-        </ResizablePanel>
-        <ResizableHandle />
-        <ResizablePanel defaultSize={50}>
-          <div className="h-full w-full">
-            <SchemaViewer 
-              schema={schema} 
-              onSchemaChange={sql => setSchema({ sql })}
-            />
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-    </main>
+    <main className="fixed inset-0 flex flex-col overflow-hidden">
+    <ResizablePanelGroup
+      direction="horizontal"
+      className="h-full"
+    >
+      <ResizablePanel defaultSize={50}>
+        <div className="h-full">
+          <CodeEditor
+            value={schema.sql}
+            language="sql"
+            onChange={sql => setSchema({ sql })}
+          />
+        </div>
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel defaultSize={50}>
+        <div className="h-full">
+          <SchemaViewer 
+            schema={schema} 
+            onSchemaChange={sql => setSchema({ sql })}
+          />
+        </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  </main>
   );
 }

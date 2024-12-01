@@ -13,6 +13,7 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
 } from 'reactflow';
+import { X } from 'lucide-react';
 import 'reactflow/dist/style.css';
 
 interface SchemaViewerProps {
@@ -403,7 +404,7 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
   }, []);
 
   return (
-    <div className="h-full w-full">
+    <div className="h-full">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -424,7 +425,7 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
           },
         }}
         fitView
-        className="h-full w-full"
+        className="h-full"
       >
         <Background color={isDark ? '#475569' : '#e2e8f0'} />
         <Controls className={isDark ? 'text-white' : 'text-slate-800'} />
@@ -432,6 +433,13 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
       
       {selectedNode && (
         <div className={`absolute top-4 right-4 p-4 rounded-lg shadow-lg ${isDark ? 'bg-slate-700 text-white' : 'bg-white text-slate-800'}`}>
+          <button
+            onClick={() => setSelectedNode(null)}
+            className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            aria-label="Fermer"
+          >
+            <X size={16} />
+          </button>
           <h3 className="font-bold mb-2">{selectedNode.id}</h3>
           <div className="space-y-2">
             {(selectedNode.data.fields as string[]).map((field: string, index: number) => (

@@ -12,7 +12,7 @@ interface CodeEditorProps {
 export default function CodeEditor({ value, language, onChange }: CodeEditorProps) {
   return (
     <Editor
-      height="100vh"
+      height="100%"
       language={language}
       value={value}
       onChange={(value) => onChange(value || '')}
