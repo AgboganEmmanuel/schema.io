@@ -269,29 +269,37 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
     
     const tables = new Map<string, { fields: string[]; foreignKeys: ForeignKey[] }>();
     
-    // Collecter d'abord toutes les tables
+    // Collecter les tables
     nodes.forEach(node => {
+      // Nettoyer les champs de toute syntaxe Prisma
+      const cleanedFields = node.data.fields.map((field: string) => {
+        return field.replace(/@\w+(\([^)]*\))?/g, '').trim(); // Supprime les attributs Prisma
+      });
+      
       tables.set(node.id, { 
-        fields: node.data.fields,
+        fields: cleanedFields,
         foreignKeys: []
       });
     });
 
-    // Collecter les foreign keys depuis les edges existants
+    // Collecter les foreign keys
     edges.forEach(edge => {
       const sourceTable = tables.get(edge.source);
       if (sourceTable && edge.sourceHandle && edge.targetHandle) {
         sourceTable.foreignKeys.push({
-          sourceField: edge.sourceHandle,
+          sourceField: edge.sourceHandle.replace(/@\w+(\([^)]*\))?/g, '').trim(),
           targetTable: edge.target,
-          targetField: edge.targetHandle
+          targetField: edge.targetHandle.replace(/@\w+(\([^)]*\))?/g, '').trim()
         });
       }
     });
 
-    // Générer le SQL avec les foreign keys existants
+    // Générer le SQL standard
     const sqlStatements = Array.from(tables.entries()).map(([tableName, tableInfo]) => {
-      const fieldsSQL = tableInfo.fields.join(',\n  ');
+      const fieldsSQL = tableInfo.fields
+        .filter(field => field.trim()) // Ignorer les champs vides
+        .join(',\n  ');
+        
       const tableFKs = tableInfo.foreignKeys.map(fk =>
         `FOREIGN KEY (${fk.sourceField}) REFERENCES ${fk.targetTable}(${fk.targetField})`
       );

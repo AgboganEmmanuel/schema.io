@@ -14,9 +14,11 @@ export async function POST(request: Request) {
       max_tokens: 4096,
       messages: [{
         role: 'user',
-        content: `Generate a database schema based on this description: ${prompt}. 
-                  Provide the schema in both SQL and Prisma format. 
-                  Format your response as JSON with two fields: 'sql' and 'prisma'.`
+        content: `Generate a standard SQL database schema based on this description: ${prompt}. 
+                  Only provide standard SQL CREATE TABLE statements with standard SQL data types.
+                  Do not include any Prisma, ORM-specific syntax, or database-specific features.
+                  Each CREATE TABLE statement should be separated by a blank line.
+                  Include appropriate PRIMARY KEY and FOREIGN KEY constraints using standard SQL syntax.`
       }],
     });
 
@@ -24,19 +26,7 @@ export async function POST(request: Request) {
       block.type === 'text' && 'text' in block 
     )?.text || '';
 
-    let parsedResponse;
-    
-    try {
-      parsedResponse = JSON.parse(response);
-    } catch (e) {
-      // Si la réponse n'est pas un JSON valide, on crée un objet avec les formats par défaut
-      parsedResponse = {
-        sql: response,
-        prisma: '// Conversion en Prisma à implémenter'
-      };
-    }
-
-    return NextResponse.json(parsedResponse);
+    return NextResponse.json({ sql: response });
   } catch (error) {
     console.error('Error:', error);
     return NextResponse.json(
