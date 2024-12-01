@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ReactFlow, { 
   Node, 
   Edge,
@@ -94,6 +94,9 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
   const [isDark, setIsDark] = React.useState(false);
   const [initialSetup, setInitialSetup] = React.useState(true);
   const [isUpdatingFromSQL, setIsUpdatingFromSQL] = React.useState(false);
+  const [isNodeMoving, setIsNodeMoving] = useState(false);
+  const nodePositionRef = useRef<{ [key: string]: { x: number; y: number } }>({});
+  const moveTimeoutRef = useRef<NodeJS.Timeout>();
   const prevSqlRef = React.useRef(schema?.sql);
 
   useEffect(() => {
@@ -129,6 +132,7 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
   const parseSchema = React.useCallback(() => {
     if (!schema?.sql) return;
     if (prevSqlRef.current === schema.sql && !initialSetup) return;
+    if (isNodeMoving) return;
     
     setIsUpdatingFromSQL(true);
     prevSqlRef.current = schema.sql;
@@ -244,10 +248,16 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
       });
     });
 
-    setNodes(parsedNodes);
+    const updatedNodes = parsedNodes.map(newNode => {
+      const existingNode = nodes.find(n => n.id === newNode.id);
+      return existingNode ? { ...newNode, position: existingNode.position } : newNode;
+    });
+
+    setNodes(updatedNodes);
     setEdges(parsedEdges);
     setInitialSetup(false);
-  }, [schema?.sql, isDark, nodes, initialSetup, generateEdgeId]);
+    setIsUpdatingFromSQL(false);
+  }, [schema?.sql, isDark, initialSetup, generateEdgeId, isNodeMoving]);
 
   useEffect(() => {
     parseSchema();
@@ -257,50 +267,82 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
   const updateSQL = React.useCallback((nodes: Node[], edges: Edge[]) => {
     if (!onSchemaChange || isUpdatingFromSQL) return;
     
-    const tables = new Map<string, { fields: string[] }>();
+    const tables = new Map<string, { fields: string[]; foreignKeys: ForeignKey[] }>();
+    
+    // Collecter d'abord toutes les tables
     nodes.forEach(node => {
-      tables.set(node.id, { fields: node.data.fields });
+      tables.set(node.id, { 
+        fields: node.data.fields,
+        foreignKeys: []
+      });
     });
 
-    const foreignKeys = edges.map(edge => ({
-      sourceTable: edge.source,
-      sourceField: edge.sourceHandle || '',
-      targetTable: edge.target,
-      targetField: edge.targetHandle || '',
-    }));
+    // Collecter les foreign keys depuis les edges existants
+    edges.forEach(edge => {
+      const sourceTable = tables.get(edge.source);
+      if (sourceTable && edge.sourceHandle && edge.targetHandle) {
+        sourceTable.foreignKeys.push({
+          sourceField: edge.sourceHandle,
+          targetTable: edge.target,
+          targetField: edge.targetHandle
+        });
+      }
+    });
 
+    // Générer le SQL avec les foreign keys existants
     const sqlStatements = Array.from(tables.entries()).map(([tableName, tableInfo]) => {
       const fieldsSQL = tableInfo.fields.join(',\n  ');
-      const tableFK = foreignKeys
-        .filter(fk => fk.sourceTable === tableName)
-        .map(fk => `FOREIGN KEY (${fk.sourceField}) REFERENCES ${fk.targetTable}(${fk.targetField})`);
+      const tableFKs = tableInfo.foreignKeys.map(fk =>
+        `FOREIGN KEY (${fk.sourceField}) REFERENCES ${fk.targetTable}(${fk.targetField})`
+      );
       
       return `CREATE TABLE ${tableName} (\n  ${fieldsSQL}${
-        tableFK.length ? ',\n  ' + tableFK.join(',\n  ') : ''
+        tableFKs.length ? ',\n  ' + tableFKs.join(',\n  ') : ''
       }\n);`;
     });
 
-    onSchemaChange(sqlStatements.join('\n\n'));
-  }, [onSchemaChange, isUpdatingFromSQL]);
+    const newSQL = sqlStatements.join('\n\n');
+    if (newSQL !== schema.sql) {
+      setIsUpdatingFromSQL(true);
+      onSchemaChange(newSQL);
+      setTimeout(() => setIsUpdatingFromSQL(false), 0);
+    }
+  }, [onSchemaChange, isUpdatingFromSQL, schema.sql]);
 
   const handleNodesChange = React.useCallback(
     (changes: NodeChange[]) => {
-      onNodesChange(changes);
-      const updatedNodes = nodes.map(node => {
-        const change = changes.find(
-          (c): c is NodeChange & { id: string; type: 'position'; position: { x: number; y: number } } => 
-            'id' in c && c.id === node.id && c.type === 'position'
-        );
-        if (change) {
-          return { ...node, position: change.position };
+      const positionChanges = changes.filter(change => 
+        change.type === 'position' && 'position' in change
+      ) as (NodeChange & { position: { x: number; y: number } })[];
+
+      if (positionChanges.length > 0) {
+        if (moveTimeoutRef.current) {
+          clearTimeout(moveTimeoutRef.current);
         }
-        return node;
-      });
-      if (changes.some(change => change.type === 'position')) {
-        updateSQL(updatedNodes, edges);
+
+        setIsNodeMoving(true);
+        positionChanges.forEach(change => {
+          if ('id' in change) {
+            nodePositionRef.current[change.id] = change.position;
+          }
+        });
+      }
+
+      onNodesChange(changes);
+      
+      if (positionChanges.length > 0) {
+        moveTimeoutRef.current = setTimeout(() => {
+          setIsNodeMoving(false);
+          // Ne mettre à jour que les positions sans toucher aux relations
+          const updatedNodes = nodes.map(node => ({
+            ...node,
+            position: nodePositionRef.current[node.id] || node.position
+          }));
+          setNodes(updatedNodes);
+        }, 500);
       }
     },
-    [nodes, edges, onNodesChange, updateSQL]
+    [nodes, setNodes, onNodesChange]
   );
 
   const handleEdgesChange = React.useCallback(
@@ -343,6 +385,14 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
     },
     [nodes, edges, setEdges, updateSQL, isDark, generateEdgeId]
   );
+
+  useEffect(() => {
+    return () => {
+      if (moveTimeoutRef.current) {
+        clearTimeout(moveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="h-full w-full">
