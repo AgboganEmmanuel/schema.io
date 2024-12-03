@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import ReactFlow, { 
   Node, 
   Edge,
@@ -20,6 +20,7 @@ import ReactFlow, {
 } from 'reactflow';
 import { X } from 'lucide-react';
 import 'reactflow/dist/style.css';
+import { toPng } from 'html-to-image';
 
 interface SchemaViewerProps {
   schema: {
@@ -95,13 +96,16 @@ interface TableInfo {
 
 export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerProps) {
   return (
-    <ReactFlowProvider>
-      <SchemaViewerInner schema={schema} onSchemaChange={onSchemaChange} />
-    </ReactFlowProvider>
+    <div className="h-full w-full">
+      <ReactFlowProvider>
+        <SchemaViewerInner schema={schema} onSchemaChange={onSchemaChange} />
+      </ReactFlowProvider>
+    </div>
   );
 }
 
 function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = React.useState<Node | null>(null);
@@ -109,33 +113,12 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
   const [initialSetup, setInitialSetup] = React.useState(true);
   const [isUpdatingFromSQL, setIsUpdatingFromSQL] = React.useState(false);
   const [isNodeMoving, setIsNodeMoving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const nodePositionRef = useRef<{ [key: string]: { x: number; y: number } }>({});
   const moveTimeoutRef = useRef<NodeJS.Timeout>();
   const prevSqlRef = React.useRef(schema?.sql);
   const reactFlowRef = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
-
-  useEffect(() => {
-    const updateTheme = () => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    };
-    updateTheme();
-
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
-          updateTheme();
-        }
-      });
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    return () => observer.disconnect();
-  }, []);
 
   const generateEdgeId = React.useCallback((source: string, sourceField: string, target: string, targetField: string) => {
     const [firstTable, firstField, secondTable, secondField] = [source, sourceField, target, targetField]
@@ -410,6 +393,45 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
     [nodes, edges, setEdges, updateSQL, isDark, generateEdgeId]
   );
 
+  const downloadAsPng = useCallback(async () => {
+    if (!reactFlowRef.current) return;
+
+    try {
+      setIsExporting(true);
+      
+      // Attendre que ReactFlow soit complètement rendu
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const dataUrl = await toPng(reactFlowRef.current, {
+        backgroundColor: isDark ? '#020617' : '#ffffff',
+        quality: 1,
+        pixelRatio: 2,
+        skipFonts: true, // Ignorer le chargement des polices web
+        style: {
+          '.react-flow__viewport': {
+            transform: 'none !important'
+          }
+        },
+        filter: (node) => {
+          // Exclure les éléments de contrôle de l'export
+          const excludeClasses = ['react-flow__controls', 'absolute'];
+          return !excludeClasses.some(className => 
+            node.classList?.contains(className)
+          );
+        }
+      });
+      
+      const link = document.createElement('a');
+      link.download = 'schema-diagram.png';
+      link.href = dataUrl;
+      link.click();
+    } catch (error) {
+      console.error('Error exporting schema:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [isDark]);
+
   useEffect(() => {
     return () => {
       if (moveTimeoutRef.current) {
@@ -418,9 +440,66 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
     };
   }, []);
 
+  useEffect(() => {
+    const updateTheme = () => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    };
+    updateTheme();
+
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          updateTheme();
+        }
+      });
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const { fitView } = useReactFlow();
+
   return (
-    <div className="h-full w-full relative">
+    <div className="h-full w-full relative flex flex-col">
+      {/* Export button in top right */}
       <div className="absolute top-2 right-2 z-50">
+        <button
+          onClick={downloadAsPng}
+          disabled={isExporting}
+          className={`p-2 rounded-lg flex items-center justify-center ${
+            isDark 
+              ? 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700' 
+              : 'bg-white hover:bg-slate-50 text-slate-800 border border-slate-200'
+          }`}
+          title="Export as PNG"
+        >
+          {isExporting ? (
+            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <svg 
+              className="w-4 h-4" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+              />
+            </svg>
+          )}
+        </button>
+      </div>
+      
+      {/* Controls in bottom left */}
+      <div className="absolute bottom-2 left-2 z-50">
         <Controls 
           className={`${isDark ? 'dark' : ''} bg-background border rounded-lg shadow-lg`}
           showZoom={true}
@@ -428,6 +507,7 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
           showInteractive={false}
         />
       </div>
+
       <ReactFlow
         ref={reactFlowRef}
         onInit={(instance) => setReactFlowInstance(instance)}
@@ -452,6 +532,7 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
           },
         }}
         fitView
+        className="flex-1 [&_.react-flow__viewport]:!transform-gpu"
       >
         <Background color={isDark ? '#475569' : '#94a3b8'} />
       </ReactFlow>

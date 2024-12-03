@@ -1,36 +1,38 @@
 import { NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+import { generateSchema } from '@/lib/huggingface';
 
 export async function POST(request: Request) {
+  if (!process.env.HUGGING_FACE_TOKEN) {
+    return NextResponse.json(
+      { error: 'Hugging Face API token not configured' },
+      { status: 500 }
+    );
+  }
+
   try {
     const { prompt } = await request.json();
+    
+    if (!prompt) {
+      return NextResponse.json(
+        { error: 'Prompt is required' },
+        { status: 400 }
+      );
+    }
 
-    const message = await anthropic.messages.create({
-      model: 'claude-3-opus-20240229',
-      max_tokens: 4096,
-      messages: [{
-        role: 'user',
-        content: `Generate a standard SQL database schema based on this description: ${prompt}. 
-                  Only provide standard SQL CREATE TABLE statements with standard SQL data types.
-                  Do not include any Prisma, ORM-specific syntax, or database-specific features.
-                  Each CREATE TABLE statement should be separated by a blank line.
-                  Include appropriate PRIMARY KEY and FOREIGN KEY constraints using standard SQL syntax.`
-      }],
-    });
+    const sql = await generateSchema(prompt);
+    
+    if (!sql) {
+      return NextResponse.json(
+        { error: 'Failed to generate SQL schema' },
+        { status: 500 }
+      );
+    }
 
-    const response = message.content.find(block => 
-      block.type === 'text' && 'text' in block 
-    )?.text || '';
-
-    return NextResponse.json({ sql: response });
-  } catch (error) {
+    return NextResponse.json({ sql });
+  } catch (error: any) {
     console.error('Error:', error);
     return NextResponse.json(
-      { error: 'Failed to generate schema' },
+      { error: error?.message || 'Failed to generate schema' },
       { status: 500 }
     );
   }
