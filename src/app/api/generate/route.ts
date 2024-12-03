@@ -29,10 +29,10 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ sql });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error:', error);
     return NextResponse.json(
-      { error: error?.message || 'Failed to generate schema' },
+      { error: error instanceof Error ? error.message : 'Failed to generate schema' },
       { status: 500 }
     );
   }

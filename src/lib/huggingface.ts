@@ -47,15 +47,15 @@ export async function generateSchema(prompt: string): Promise<string> {
     }
 
     return sqlContent;
-  } catch (error: any) {
+  } catch (error: Error | unknown) {
     console.error('Error generating schema:', error);
     
-    if (error?.name === 'SchemaGenerationError') {
+    if (error instanceof SchemaGenerationError) {
       throw error;
     }
     
     throw new SchemaGenerationError(
-      error?.message || 'Failed to generate schema',
+      error instanceof Error ? error.message : 'Failed to generate schema',
       'UNKNOWN'
     );
   }

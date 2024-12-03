@@ -12,10 +12,6 @@ import ReactFlow, {
   Connection,
   useNodesState,
   useEdgesState,
-  getRectOfNodes,
-  getTransformForBounds,
-  useReactFlow,
-  ReactFlowInstance,
   ReactFlowProvider,
 } from 'reactflow';
 import { X } from 'lucide-react';
@@ -105,7 +101,6 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
 }
 
 function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
-  const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = React.useState<Node | null>(null);
@@ -118,13 +113,10 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
   const moveTimeoutRef = useRef<NodeJS.Timeout>();
   const prevSqlRef = React.useRef(schema?.sql);
   const reactFlowRef = useRef<HTMLDivElement>(null);
-  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
 
   const generateEdgeId = React.useCallback((source: string, sourceField: string, target: string, targetField: string) => {
     const [firstTable, firstField, secondTable, secondField] = [source, sourceField, target, targetField]
-      .join('-')
-      .split('-')
-      .sort();
+      .map(s => s.toLowerCase());
     return `${firstTable}-${firstField}-${secondTable}-${secondField}`;
   }, []);
 
@@ -160,11 +152,11 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
       fields.forEach(field => {
         const inlineRefMatch = field.match(/(\w+).*\s+REFERENCES\s+["`]?(\w+)["`]?/i);
         if (inlineRefMatch) {
-          const [_, sourceField, targetTable] = inlineRefMatch;
+          const [, sourceField, targetTable] = inlineRefMatch;
           tables.get(tableName)?.foreignKeys.push({
             sourceField: sourceField.trim(),
             targetTable: targetTable.trim(),
-            targetField: '',
+            targetField: 'id'
           });
         }
       });
@@ -173,11 +165,11 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
       const foreignKeyRegex = /FOREIGN KEY\s*\(\s*["`]?(\w+)["`]?\s*\)\s*REFERENCES\s*["`]?(\w+)["`]?\s*\(\s*["`]?(\w+)["`]?\s*\)/gi;
       let fkMatch;
       while ((fkMatch = foreignKeyRegex.exec(fieldsMatch[1])) !== null) {
-        const [_, sourceField, targetTable, targetField] = fkMatch;
+        const [, sourceField, targetTable, targetField] = fkMatch;
         tables.get(tableName)?.foreignKeys.push({
           sourceField: sourceField.trim(),
           targetTable: targetTable.trim(),
-          targetField: targetField.trim(),
+          targetField: targetField.trim()
         });
       }
 
@@ -256,12 +248,12 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
     setEdges(parsedEdges);
     setInitialSetup(false);
     setIsUpdatingFromSQL(false);
-  }, [schema?.sql, isDark, initialSetup, generateEdgeId, isNodeMoving]);
+  }, [schema?.sql, isDark, initialSetup, generateEdgeId, isNodeMoving, nodes, setNodes, setEdges]);
 
   useEffect(() => {
     parseSchema();
     setIsUpdatingFromSQL(false);
-  }, [schema.sql, parseSchema]);
+  }, [schema.sql, parseSchema, setNodes, setEdges]);
 
   const updateSQL = React.useCallback((nodes: Node[], edges: Edge[]) => {
     if (!onSchemaChange || isUpdatingFromSQL) return;
@@ -407,11 +399,6 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
         quality: 1,
         pixelRatio: 2,
         skipFonts: true, // Ignore web font loading
-        style: {
-          '.react-flow__viewport': {
-            transform: 'none'
-          }
-        } as any, // Type assertion here
         filter: (node) => {
           // Exclude control elements from export
           const excludeClasses = ['react-flow__controls', 'absolute'];
@@ -462,24 +449,18 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
     return () => observer.disconnect();
   }, []);
 
-  const { fitView } = useReactFlow();
-
   return (
     <div className="h-full w-full relative flex flex-col">
-      {/* Export button in top right */}
-      <div className="absolute top-2 right-2 z-50">
+      {/* Export button in top left */}
+      <div className="absolute left-4 top-4 z-10">
         <button
           onClick={downloadAsPng}
           disabled={isExporting}
-          className={`p-2 rounded-lg flex items-center justify-center ${
-            isDark 
-              ? 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700' 
-              : 'bg-white hover:bg-slate-50 text-slate-800 border border-slate-200'
-          }`}
+          className="p-2 rounded-lg flex items-center justify-center bg-primary hover:bg-primary/90 text-primary-foreground disabled:pointer-events-none disabled:opacity-50"
           title="Export as PNG"
         >
           {isExporting ? (
-            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
           ) : (
             <svg 
               className="w-4 h-4" 
@@ -510,7 +491,6 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
 
       <ReactFlow
         ref={reactFlowRef}
-        onInit={(instance) => setReactFlowInstance(instance)}
         nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChange}
