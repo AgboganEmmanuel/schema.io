@@ -12,6 +12,11 @@ import ReactFlow, {
   Connection,
   useNodesState,
   useEdgesState,
+  getRectOfNodes,
+  getTransformForBounds,
+  useReactFlow,
+  ReactFlowInstance,
+  ReactFlowProvider,
 } from 'reactflow';
 import { X } from 'lucide-react';
 import 'reactflow/dist/style.css';
@@ -89,6 +94,14 @@ interface TableInfo {
 }
 
 export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerProps) {
+  return (
+    <ReactFlowProvider>
+      <SchemaViewerInner schema={schema} onSchemaChange={onSchemaChange} />
+    </ReactFlowProvider>
+  );
+}
+
+function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = React.useState<Node | null>(null);
@@ -99,6 +112,8 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
   const nodePositionRef = useRef<{ [key: string]: { x: number; y: number } }>({});
   const moveTimeoutRef = useRef<NodeJS.Timeout>();
   const prevSqlRef = React.useRef(schema?.sql);
+  const reactFlowRef = useRef<HTMLDivElement>(null);
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
 
   useEffect(() => {
     const updateTheme = () => {
@@ -160,13 +175,13 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
       
       // Check for inline REFERENCES in field definitions
       fields.forEach(field => {
-        const inlineRefMatch = field.match(/(\w+).*\s+REFERENCES\s+["`]?(\w+)["`]?\s*\(\s*["`]?(\w+)["`]?\s*\)/i);
+        const inlineRefMatch = field.match(/(\w+).*\s+REFERENCES\s+["`]?(\w+)["`]?/i);
         if (inlineRefMatch) {
-          const [_, sourceField, targetTable, targetField] = inlineRefMatch;
+          const [_, sourceField, targetTable] = inlineRefMatch;
           tables.get(tableName)?.foreignKeys.push({
             sourceField: sourceField.trim(),
             targetTable: targetTable.trim(),
-            targetField: targetField.trim(),
+            targetField: '',
           });
         }
       });
@@ -404,8 +419,18 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
   }, []);
 
   return (
-    <div className="h-full">
+    <div className="h-full w-full relative">
+      <div className="absolute top-2 right-2 z-50">
+        <Controls 
+          className={`${isDark ? 'dark' : ''} bg-background border rounded-lg shadow-lg`}
+          showZoom={true}
+          showFitView={true}
+          showInteractive={false}
+        />
+      </div>
       <ReactFlow
+        ref={reactFlowRef}
+        onInit={(instance) => setReactFlowInstance(instance)}
         nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChange}
@@ -416,19 +441,19 @@ export default function SchemaViewer({ schema, onSchemaChange }: SchemaViewerPro
           type: 'smoothstep',
           animated: true,
           style: { 
-            strokeWidth: 2,
+            strokeWidth: 3,
+            stroke: isDark ? '#94a3b8' : '#475569',
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            width: 20,
-            height: 20,
+            width: 25,
+            height: 25,
+            color: isDark ? '#94a3b8' : '#475569',
           },
         }}
         fitView
-        className="h-full"
       >
-        <Background color={isDark ? '#475569' : '#e2e8f0'} />
-        <Controls className={isDark ? 'text-white' : 'text-slate-800'} />
+        <Background color={isDark ? '#475569' : '#94a3b8'} />
       </ReactFlow>
       
       {selectedNode && (

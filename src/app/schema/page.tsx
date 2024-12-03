@@ -59,7 +59,7 @@ export default function SchemaPage() {
   }
 
   return (
-    <main className="fixed inset-0 flex flex-col overflow-hidden">
+    <main className="flex-1 flex flex-col overflow-hidden">
     <ResizablePanelGroup
       direction="horizontal"
       className="h-full"
