@@ -1,19 +1,22 @@
 import { Editor } from '@monaco-editor/react';
-import { useTheme } from 'next-themes';
+import { useTheme } from '@/components/ui/theme-provider';
 import { useEffect, useState } from 'react';
 
 interface CodeEditorProps {
   value: string;
   language?: string;
-  onChange?: ((value: string | undefined) => void) | undefined;
+  onChange?: ((value: string | undefined) => void);
 }
 
-export default function CodeEditor({ value, language = 'sql', onChange }: CodeEditorProps) {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
+function CodeEditor({ value, language = 'sql', onChange }: CodeEditorProps) {
+  const { theme } = useTheme();
   const [isCopied, setIsCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  const editorTheme = isDark ? 'vs-dark' : 'light';
+  // Attendre que le composant soit monté pour éviter les problèmes d'hydratation
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (isCopied) {
@@ -27,50 +30,58 @@ export default function CodeEditor({ value, language = 'sql', onChange }: CodeEd
       await navigator.clipboard.writeText(value);
       setIsCopied(true);
     } catch (err) {
-      console.error('Failed to copy text:', err);
+      console.error('Failed to copy text: ', err);
     }
   };
 
+  if (!mounted) {
+    return null;
+  }
+
   return (
-    <div className="h-full w-full relative">
-      <div className="absolute top-2 right-2 z-50">
+    <div className="relative w-full h-full">
+      <div className="absolute top-0 right-0 z-10 m-2">
         <button
           onClick={handleCopy}
-          className={`p-2 rounded-lg flex items-center justify-center ${
-            isDark 
-              ? 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700' 
-              : 'bg-white hover:bg-slate-50 text-slate-800 border border-slate-200'
-          }`}
-          title={isCopied ? 'Copied!' : 'Copy to clipboard'}
+          className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-400 bg-gray-800 rounded hover:text-gray-50 hover:bg-gray-700"
         >
           {isCopied ? (
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
+            <>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
+                className="w-3 h-3"
+              >
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Copied!</span>
+            </>
           ) : (
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
+            <>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-              />
-            </svg>
+                className="w-3 h-3"
+              >
+                <rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect>
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+              </svg>
+              <span>Copy</span>
+            </>
           )}
         </button>
       </div>
@@ -79,7 +90,7 @@ export default function CodeEditor({ value, language = 'sql', onChange }: CodeEd
         defaultLanguage={language}
         value={value}
         onChange={onChange}
-        theme={editorTheme}
+        theme={theme === 'dark' ? 'vs-dark' : 'vs'}
         options={{
           minimap: { enabled: false },
           fontSize: 14,
@@ -88,8 +99,28 @@ export default function CodeEditor({ value, language = 'sql', onChange }: CodeEd
           scrollBeyondLastLine: false,
           readOnly: !onChange,
           automaticLayout: true,
+          scrollbar: {
+            vertical: 'visible',
+            horizontal: 'visible',
+            useShadows: false,
+            verticalScrollbarSize: 10,
+            horizontalScrollbarSize: 10,
+          },
+          overviewRulerLanes: 0,
+          lineDecorationsWidth: 0,
+          quickSuggestions: {
+            other: true,
+            comments: true,
+            strings: true
+          },
+          fontFamily: "'JetBrains Mono', 'Fira Code', Monaco, 'Courier New', monospace",
+          fontLigatures: true,
+          padding: { top: 16, bottom: 16 },
         }}
+        className={theme === 'dark' ? 'dark-editor' : 'light-editor'}
       />
     </div>
   );
 }
+
+export default CodeEditor;

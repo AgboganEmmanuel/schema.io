@@ -102,10 +102,10 @@ export default function SchemaPage() {
   }
 
   return (
-    <main className="flex flex-col h-screen overflow-hidden">
+    <main className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
       <ResizablePanelGroup
         direction="horizontal"
-        className="flex-1"
+        className="flex-1 min-h-0"
       >
         <ResizablePanel defaultSize={50} minSize={30}>
           <div className="h-full w-full p-2">
