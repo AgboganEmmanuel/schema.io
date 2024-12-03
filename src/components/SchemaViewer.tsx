@@ -406,14 +406,14 @@ function SchemaViewerInner({ schema, onSchemaChange }: SchemaViewerProps) {
         backgroundColor: isDark ? '#020617' : '#ffffff',
         quality: 1,
         pixelRatio: 2,
-        skipFonts: true, // Ignorer le chargement des polices web
+        skipFonts: true, // Ignore web font loading
         style: {
           '.react-flow__viewport': {
-            transform: 'none !important'
+            transform: 'none'
           }
-        },
+        } as any, // Type assertion here
         filter: (node) => {
-          // Exclure les éléments de contrôle de l'export
+          // Exclude control elements from export
           const excludeClasses = ['react-flow__controls', 'absolute'];
           return !excludeClasses.some(className => 
             node.classList?.contains(className)
