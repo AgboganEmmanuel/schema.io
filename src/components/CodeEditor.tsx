@@ -13,7 +13,6 @@ function CodeEditor({ value, language = 'sql', onChange }: CodeEditorProps) {
   const [isCopied, setIsCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // Attendre que le composant soit monté pour éviter les problèmes d'hydratation
   useEffect(() => {
     setMounted(true);
   }, []);
