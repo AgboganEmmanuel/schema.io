@@ -23,7 +23,7 @@ export default function Home() {
             </label>
             <textarea
               id="prompt"
-              className="w-full p-3 border rounded-md min-h-[100px] bg-background"
+              className="w-full p-3 border rounded-md min-h-[100px] bg-background text-black"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Exemple: Créer un schéma de base de données pour une application de blog avec des utilisateurs et des articles"
