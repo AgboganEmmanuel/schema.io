@@ -3,8 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable/resizable";
-import LoadingModal from '@/components/ui/loading-modal/LoadingModal';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { LoadingModal } from '@/components/ui/loading-modal';
 
 const SchemaViewer = dynamic(() => import('@/components/SchemaViewer'), { ssr: false });
 const CodeEditor = dynamic(() => import('@/components/CodeEditor'), { ssr: false });
