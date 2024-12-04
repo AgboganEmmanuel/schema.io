@@ -3,11 +3,11 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { LoadingModal } from '@/components/ui/loading-modal';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../../../src/components/ui/resizable";
+import { LoadingModal } from '../../../src/components/ui/loading-modal';
 
-const SchemaViewer = dynamic(() => import('@/components/SchemaViewer'), { ssr: false });
-const CodeEditor = dynamic(() => import('@/components/CodeEditor'), { ssr: false });
+const SchemaViewer = dynamic(() => import('../../../src/components/SchemaViewer'), { ssr: false });
+const CodeEditor = dynamic(() => import('../../../src/components/CodeEditor'), { ssr: false });
 
 function SchemaContent() {
   const [schema, setSchema] = useState<{ sql: string } | null>(null);
