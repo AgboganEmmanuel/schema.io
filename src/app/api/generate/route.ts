@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { generateSchema } from '@/lib/huggingface';
+import { generateSchema } from '../../../lib/huggingface';
 
 export async function POST(request: Request) {
   if (!process.env.HUGGING_FACE_TOKEN) {
