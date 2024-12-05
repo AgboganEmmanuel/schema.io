@@ -4,6 +4,7 @@
 
 body {
   font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(to bottom right, #0a0a0a, #1a1a1a);
 }
 
 @layer base {
@@ -52,5 +53,3 @@ body {
     --ring: 0 0% 83.1%;
   }
 }
-
-

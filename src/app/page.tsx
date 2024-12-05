@@ -19,22 +19,24 @@ export default function Home() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="prompt" className="block text-sm font-medium mb-2">
-              Décrivez votre schéma
+              Tell us about your application
             </label>
             <textarea
               id="prompt"
-              className="w-full p-3 border rounded-md min-h-[100px] bg-background text-black"
+              className="w-full p-3 border rounded-md min-h-[100px] bg-black text-white placeholder-white"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Exemple: Créer un schéma de base de données pour une application de blog avec des utilisateurs et des articles"
+              placeholder="Example: Create a database schema for a blog application with users and posts"
             />
           </div>
-          <button
-            type="submit"
-            className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-          >
-            Générer le schéma
-          </button>
+          <div className="flex justify-center">
+            <button
+              type="submit"
+              className="py-2 px-4 bg-blue-600 text-white rounded-md"
+            >
+              Generate
+            </button>
+          </div>
         </form>
       </div>
     </main>
